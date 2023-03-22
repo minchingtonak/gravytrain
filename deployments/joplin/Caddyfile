@@ -1,0 +1,27 @@
+# Reference caddyfile (see labels in compose file)
+{$DOMAIN}:8888 {
+  log {
+    level INFO
+    output file {$LOG_FILE} {
+      roll_size 10MB
+      roll_keep 10
+    }
+  }
+
+  # Use the ACME HTTP-01 challenge to get a cert for the configured domain.
+  # tls {$EMAIL}
+
+  # use this directive if not hosting at subpath
+  # reverse_proxy joplin:22300
+
+  redir {$SUBPATH} {$SUBPATH}/ permanent
+  handle_path {$SUBPATH}/* {
+    reverse_proxy joplin:22300
+  }
+
+  handle {
+    respond "Access Denied" 403 {
+      close
+    }
+  }
+}

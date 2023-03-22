@@ -1,0 +1,23 @@
+version: "3.7"
+services:
+  caddy:
+    image: lucaslorentz/caddy-docker-proxy:ci-alpine
+    container_name: caddy
+    restart: unless-stopped
+    ports:
+      # - '80:80' # Needed for the ACME HTTP-01 challenge.
+      # - '443:443'
+      - '8888:8888'
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./caddy/config:/config
+      - ./caddy/data:/data
+      - ./caddy.logrotate:/etc/logrotate.d/caddy:ro
+    environment:
+      CADDY_INGRESS_NETWORKS: caddy
+    networks:
+      - caddy
+
+networks:
+  caddy:
+    external: true
