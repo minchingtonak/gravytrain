@@ -10,7 +10,7 @@ services:
     ports:
       - '127.0.0.1:22300:22300'
     environment:
-      APP_BASE_URL: http://localhost:8888 # full url, ending with ${SUBPATH} if using subpath
+      APP_BASE_URL: # full url, ending with ${SUBPATH} if using subpath (http://localhost:8888)
       APP_PORT: 22300
       DB_CLIENT: pg
       POSTGRES_HOST: db
@@ -22,7 +22,7 @@ services:
       - caddy
       - joplin-db
     labels:
-      caddy: ${DOMAIN}:8888 # domain must not end with '/' (http://localhost)
+      caddy: ${DOMAIN}:443 # domain must not end with '/' (http://localhost)
       caddy.0_log.level: INFO
       caddy.0_log.output: file /data/caddy.log
       caddy.0_log.output.0_roll_size: 10MB

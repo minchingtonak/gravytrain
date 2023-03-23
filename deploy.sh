@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
 
-python3 translate.py
-terraform apply
+if ! [ docker network ls | grep 'caddy' ]; then
+    docker network create caddy
+    echo 'Created docker network for caddy'
+fi
+
+terraform apply # -auto-approve
