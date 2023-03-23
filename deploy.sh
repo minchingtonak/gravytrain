@@ -6,3 +6,5 @@ if ! [ docker network ls | grep 'caddy' ]; then
 fi
 
 terraform apply # -auto-approve
+
+echo 'Deployed infra :)'
