@@ -126,7 +126,7 @@ def convert_compose_file(input_file):
                     if matches:
                         if matches.group(2) not in dangling_env_vars:
                             hcl_output += f'variable "{matches.group(2)}" {{\n  type = string\n}}\n\n'
-                        dangling_env_vars[matches.group(2)] = ""
+                        dangling_env_vars[matches.group(2)] = "FIXME"
 
     hcl_output += convert_networks_to_hcl(networks)
 

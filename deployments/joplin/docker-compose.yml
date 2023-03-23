@@ -10,27 +10,27 @@ services:
     ports:
       - '127.0.0.1:22300:22300'
     environment:
-      APP_BASE_URL: # full url, ending with ${SUBPATH} if using subpath (http://localhost:8888)
+      APP_BASE_URL: FIXME # full url, ending with ${JOPLIN_SUBPATH} if using subpath (http://localhost:8888)
       APP_PORT: 22300
       DB_CLIENT: pg
       POSTGRES_HOST: db
       POSTGRES_PORT: 5432
       POSTGRES_DATABASE: joplin
       POSTGRES_USER: joplin
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_PASSWORD: ${JOPLIN_POSTGRES_PASSWORD}
     networks:
       - caddy
       - joplin-db
     labels:
-      caddy: ${DOMAIN}:443 # domain must not end with '/' (http://localhost)
+      caddy: ${JOPLIN_DOMAIN}:443 # domain must not end with '/' (http://localhost)
       caddy.0_log.level: INFO
       caddy.0_log.output: file /data/caddy.log
       caddy.0_log.output.0_roll_size: 10MB
       caddy.0_log.output.1_roll_keep: 10
-      # caddy.1_tls: ${EMAIL} # Use the ACME HTTP-01 challenge to get a cert for the configured domain
+      caddy.1_tls: ${JOPLIN_TLS_EMAIL} # Use the ACME HTTP-01 challenge to get a cert for the configured domain
       # caddy.2_reverse_proxy: joplin:22300 # use this directive if not hosting at subpath
-      caddy.2_redir: ${SUBPATH} ${SUBPATH}/ permanent # use the following directives to host at subpath
-      caddy.3_handle_path: ${SUBPATH}/*
+      caddy.2_redir: ${JOPLIN_SUBPATH} ${JOPLIN_SUBPATH}/ permanent # use the following directives to host at subpath
+      caddy.3_handle_path: ${JOPLIN_SUBPATH}/*
       caddy.3_handle_path.reverse_proxy: joplin:22300
       caddy.4_handle.respond: AccessDenied 403
       caddy.4_handle.respond.close: '{{\"\"}}' # convoluted way of saying no arguments
@@ -46,7 +46,7 @@ services:
     environment:
       POSTGRES_DB: joplin
       POSTGRES_USER: joplin
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_PASSWORD: ${JOPLIN_POSTGRES_PASSWORD}
     networks:
       - joplin-db
 

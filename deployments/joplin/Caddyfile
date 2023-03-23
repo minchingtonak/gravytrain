@@ -1,5 +1,5 @@
 # Reference caddyfile (see labels in compose file)
-{$DOMAIN}:443 {
+{$JOPLIN_DOMAIN}:443 {
   log {
     level INFO
     output file {$LOG_FILE} {
@@ -9,12 +9,12 @@
   }
 
   # Use the ACME HTTP-01 challenge to get a cert for the configured domain.
-  tls {$EMAIL}
+  tls {$JOPLIN_TLS_EMAIL}
 
   # use this directive if not hosting at subpath
   # reverse_proxy joplin:22300
 
-  redir {$SUBPATH} {$SUBPATH}/ permanent
+  redir {$JOPLIN_SUBPATH} {$JOPLIN_SUBPATH}/ permanent
   handle_path {$SUBPATH}/* {
     reverse_proxy joplin:22300
   }
