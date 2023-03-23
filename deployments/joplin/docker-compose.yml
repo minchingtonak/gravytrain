@@ -27,7 +27,7 @@ services:
       caddy.0_log.output: file /data/caddy.log
       caddy.0_log.output.0_roll_size: 10MB
       caddy.0_log.output.1_roll_keep: 10
-      caddy.1_tls: ${JOPLIN_TLS_EMAIL} # Use the ACME HTTP-01 challenge to get a cert for the configured domain
+      caddy.1_tls: ${TLS_EMAIL} # Use the ACME HTTP-01 challenge to get a cert for the configured domain
       # caddy.2_reverse_proxy: joplin:22300 # use this directive if not hosting at subpath
       caddy.2_redir: ${JOPLIN_SUBPATH} ${JOPLIN_SUBPATH}/ permanent # use the following directives to host at subpath
       caddy.3_handle_path: ${JOPLIN_SUBPATH}/*

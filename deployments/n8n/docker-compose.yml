@@ -1,0 +1,41 @@
+version: "3.7"
+
+services:
+  n8n:
+    image: n8nio/n8n
+    container_name: n8n
+    restart: always
+    ports:
+      - '9898:9898'
+    environment:
+      N8N_BASIC_AUTH_ACTIVE: true
+      N8N_BASIC_AUTH_USER: ${N8N_AUTH_USER}
+      N8N_BASIC_AUTH_PASSWORD: ${N8N_AUTH_PASSWORD}
+      N8N_HOST: ${N8N_HOST} # n8n.example.com
+      N8N_PORT: 9898
+      N8N_PROTOCOL: https
+      NODE_ENV: production
+      WEBHOOK_URL: https://${N8N_HOST}/
+      GENERIC_TIMEZONE: ${N8N_CRON_TIMEZONE}
+    volumes:
+      - ./data/local_files:/files
+      - ./data/.n8n:/home/node/.n8n
+    networks:
+      - caddy
+    labels:
+      caddy: https://${N8N_HOST}:443
+      caddy.0_log.level: INFO
+      caddy.0_log.output: file /data/caddy.log
+      caddy.0_log.output.0_roll_size: 10MB
+      caddy.0_log.output.1_roll_keep: 10
+      caddy.1_tls: ${TLS_EMAIL} # Use the ACME HTTP-01 challenge to get a cert for the configured domain
+      caddy.2_reverse_proxy: n8n:9898 # use this directive if not hosting at subpath
+      # caddy.2_redir: ${JOPLIN_SUBPATH} ${JOPLIN_SUBPATH}/ permanent # use the following directives to host at subpath
+      # caddy.3_handle_path: ${JOPLIN_SUBPATH}/*
+      # caddy.3_handle_path.reverse_proxy: joplin:22300
+      # caddy.4_handle.respond: AccessDenied 403
+      # caddy.4_handle.respond.close: '{{\"\"}}' # convoluted way of saying no arguments
+
+networks:
+  caddy:
+    external: true
