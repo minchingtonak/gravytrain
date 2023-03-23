@@ -52,7 +52,7 @@ def convert_networks_to_hcl(networks: Dict[str, Dict[str, Any]]) -> str:
         hcl += '}\n\n'
     return hcl
 
-def convert_to_hcl(service_name: str, service_config: Dict[str, Any]) -> str:
+def convert_to_hcl(package_name: str, service_name: str, service_config: Dict[str, Any]) -> str:
     hcl = f'resource "docker_container" "{service_name}" {{\n'
     hcl += f'  name = "{service_name}"\n'
     hcl += f'  image = "{service_config["image"]}"\n'
@@ -74,7 +74,7 @@ def convert_to_hcl(service_name: str, service_config: Dict[str, Any]) -> str:
         for volume in service_config["volumes"]:
             parts = volume.split(":")
             is_path = "/" in parts[0] or "." in parts[0]
-            hcl += f'  volumes {{\n    {"host_path" if is_path else "volume_name"} = "{os.path.abspath(parts[0]) if is_path else parts[0]}"\n    container_path = "{os.path.abspath(parts[1])}"\n'
+            hcl += f'  volumes {{\n    {"host_path" if is_path else "volume_name"} = "{os.path.abspath(os.path.join("deployments", package_name, parts[0])) if is_path else parts[0]}"\n    container_path = "{os.path.abspath(parts[1])}"\n'
             if len(parts) == 3:
                 hcl += f'    read_only = {"true" if parts[2] == "ro" else "false"}\n'
             hcl += "  }\n"
@@ -130,11 +130,12 @@ def convert_compose_file(input_file):
 
     hcl_output += convert_networks_to_hcl(networks)
 
+    folder_name_match = re.match(r'.*deployments/(.*)/docker-compose\..+', input_file)
+    package_name = folder_name_match.group(1)
     for service_name, service_config in services.items():
-        hcl_output += convert_to_hcl(service_name, service_config)
+        hcl_output += convert_to_hcl(package_name, service_name, service_config)
 
-    foldername = re.match(r'.*deployments/(.*)/docker-compose\..+', input_file)
-    output_file = f'{foldername.group(1)}.tf'
+    output_file = f'{package_name}.tf'
     with open(output_file, "w") as file:
         file.write(hcl_output)
 
