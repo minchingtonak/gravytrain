@@ -6,11 +6,14 @@ import json
 import glob
 from typing import Any, Dict, List, Match, Tuple, Union
 
+def stringify(value: Any) -> str:
+    return str(value).lower() if isinstance(value, bool) else str(value)
+
 def find_env_vars(value: Any) -> Union[Match[str], None]:
-    return re.findall(r'(\$\{([a-zA-Z0-9_-]+)\})', str(value))
+    return re.findall(r'(\$\{([a-zA-Z0-9_-]+)\})', stringify(value))
 
 def prefix_env_vars(value: Any) -> Union[Match[str], None]:
-    copy = str(value)
+    copy = stringify(value)
     matches = find_env_vars(copy)
     for with_braces, var_name in matches:
         copy = copy.replace(with_braces, f"${{var.{var_name}}}")
