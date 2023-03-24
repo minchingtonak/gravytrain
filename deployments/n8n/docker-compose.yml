@@ -16,7 +16,7 @@ services:
       N8N_PORT: 9898
       N8N_PROTOCOL: https
       NODE_ENV: production
-      WEBHOOK_URL: https://${N8N_HOST}/
+      WEBHOOK_URL: https://${N8N_HOST}${N8N_SUBPATH}/
       GENERIC_TIMEZONE: ${N8N_CRON_TIMEZONE}
     volumes:
       - ./data/local_files:/files
