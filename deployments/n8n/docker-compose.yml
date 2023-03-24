@@ -29,7 +29,7 @@ services:
       caddy.0_log.output: file /data/caddy.log
       caddy.0_log.output.0_roll_size: 10MB
       caddy.0_log.output.1_roll_keep: 10
-      caddy.1_tls: ${TLS_EMAIL} # Use the ACME HTTP-01 challenge to get a cert for the configured domain
+      caddy.1_tls: ${N8N_TLS_EMAIL} # Use the ACME HTTP-01 challenge to get a cert for the configured domain
       caddy.2_reverse_proxy: n8n:9898
 
 networks:
