@@ -10,7 +10,7 @@ services:
     ports:
       - '127.0.0.1:22300:22300'
     environment:
-      APP_BASE_URL: FIXME # full url, ending with ${JOPLIN_SUBPATH} if using subpath (http://localhost:8888)
+      APP_BASE_URL: ${JOPLIN_APP_FULL_URL} # full url, ending with ${JOPLIN_SUBPATH} if using subpath (http://localhost:8888)
       APP_PORT: 22300
       DB_CLIENT: pg
       POSTGRES_HOST: db
