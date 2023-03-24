@@ -6,8 +6,15 @@ import json
 import glob
 from typing import Any, Dict, List, Match, Tuple, Union
 
-def find_env_var(env_value: Any) -> Union[Match[str], None]:
-    return re.match(r'.*(\$\{([a-zA-Z0-9_-]+)\}).*', str(env_value))
+def find_env_vars(value: Any) -> Union[Match[str], None]:
+    return re.findall(r'(\$\{([a-zA-Z0-9_-]+)\})', str(value))
+
+def prefix_env_vars(value: Any) -> Union[Match[str], None]:
+    copy = str(value)
+    matches = find_env_vars(copy)
+    for with_braces, var_name in matches:
+        copy = copy.replace(with_braces, f"${{var.{var_name}}}")
+    return copy
 
 def convert_networks_to_hcl(networks: Dict[str, Dict[str, Any]]) -> str:
     hcl = ""
@@ -82,11 +89,7 @@ def convert_to_hcl(package_name: str, service_name: str, service_config: Dict[st
     if "environment" in service_config:
         hcl += "  env = [\n"
         for env_var, env_value in service_config["environment"].items():
-            matches = find_env_var(env_value)
-            if matches is not None:
-                hcl += f'    "{env_var}={str(env_value).replace(matches.group(1), f"${{var.{matches.group(2)}}}")}",\n'
-            else:
-                hcl += f'    "{env_var}={env_value}",\n'
+            hcl += f'    "{env_var}={prefix_env_vars(env_value)}",\n'
         hcl += "  ]\n"
 
     if "networks" in service_config:
@@ -95,11 +98,7 @@ def convert_to_hcl(package_name: str, service_name: str, service_config: Dict[st
 
     if "labels" in service_config:
         for name, value in service_config['labels'].items():
-            matches = find_env_var(value)
-            if matches is not None:
-                hcl += f'  labels {{\n    label = "{name}"\n    value = "{str(value).replace(matches.group(1), f"${{var.{matches.group(2)}}}")}"\n  }}\n'
-            else:
-                hcl += f'  labels {{\n    label = "{name}"\n    value = "{value}"\n  }}\n'
+            hcl += f'  labels {{\n    label = "{name}"\n    value = "{prefix_env_vars(value)}"\n  }}\n'
 
     hcl += '}\n\n'
     return hcl
@@ -122,11 +121,12 @@ def convert_compose_file(input_file):
         for key in ['environment', 'labels']:
             if key in service_config:
                 for env_value in service_config[key].values():
-                    matches = find_env_var(env_value)
+                    matches = find_env_vars(env_value)
                     if matches:
-                        if matches.group(2) not in dangling_env_vars:
-                            hcl_output += f'variable "{matches.group(2)}" {{\n  type = string\n}}\n\n'
-                        dangling_env_vars[matches.group(2)] = "FIXME"
+                        for _, var_name in matches:
+                            if var_name not in dangling_env_vars:
+                                hcl_output += f'variable "{var_name}" {{\n  type = string\n}}\n\n'
+                            dangling_env_vars[var_name] = "FIXME"
 
     hcl_output += convert_networks_to_hcl(networks)
 
