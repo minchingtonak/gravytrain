@@ -18,6 +18,11 @@ services:
       NODE_ENV: production
       WEBHOOK_URL: https://${N8N_HOST}${N8N_SUBPATH}/
       GENERIC_TIMEZONE: ${N8N_CRON_TIMEZONE}
+      EXECUTIONS_DATA_SAVE_ON_ERROR: all
+      EXECUTIONS_DATA_SAVE_ON_SUCCESS: none
+      EXECUTIONS_DATA_PRUNE: true
+      EXECUTIONS_DATA_MAX_AGE: 336 # 336 hours = 14 days
+      EXECUTIONS_DATA_PRUNE_MAX_COUNT: 50000 # keep 50k executions before pruning
     volumes:
       - ./data/local_files:/files
       - ./data/.n8n:/home/node/.n8n
