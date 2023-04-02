@@ -22,7 +22,7 @@ services:
       - caddy
       - joplin-db
     labels:
-      caddy: ${JOPLIN_DOMAIN}:443 # domain must not end with '/' (http://localhost)
+      caddy: https://${JOPLIN_DOMAIN}:443 # domain must not end with '/' (http://localhost)
       caddy.0_log.level: INFO
       caddy.0_log.output: file /data/caddy.log
       caddy.0_log.output.0_roll_size: 10MB

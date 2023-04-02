@@ -11,12 +11,12 @@ services:
       N8N_BASIC_AUTH_ACTIVE: true
       N8N_BASIC_AUTH_USER: ${N8N_AUTH_USER}
       N8N_BASIC_AUTH_PASSWORD: ${N8N_AUTH_PASSWORD}
-      N8N_HOST: ${N8N_HOST} # n8n.example.com
+      N8N_HOST: ${N8N_DOMAIN} # n8n.example.com
       N8N_PATH: ${N8N_SUBPATH}/ # /example-subpath (comment out if not hosting at subpath)
       N8N_PORT: 9898
       N8N_PROTOCOL: https
       NODE_ENV: production
-      WEBHOOK_URL: https://${N8N_HOST}${N8N_SUBPATH}/
+      WEBHOOK_URL: https://${N8N_DOMAIN}${N8N_SUBPATH}/
       GENERIC_TIMEZONE: ${N8N_CRON_TIMEZONE}
       EXECUTIONS_DATA_SAVE_ON_ERROR: all
       EXECUTIONS_DATA_SAVE_ON_SUCCESS: none
@@ -29,7 +29,7 @@ services:
     networks:
       - caddy
     labels:
-      caddy: https://${N8N_HOST}:443
+      caddy: https://${N8N_DOMAIN}:443
       caddy.0_log.level: INFO
       caddy.0_log.output: file /data/caddy.log
       caddy.0_log.output.0_roll_size: 10MB
