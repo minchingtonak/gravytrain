@@ -1,0 +1,34 @@
+version: "3.8"
+
+services:
+  couchdb:
+    image: couchdb
+    container_name: couchdb
+    restart: always
+    ports:
+      - "127.0.0.1:5984:5984"
+    environment:
+      COUCHDB_USER: ${OBSIDIAN_LIVESYNC_USER}
+      COUCHDB_PASSWORD: ${OBSIDIAN_LIVESYNC_PASSWORD}
+    volumes:
+      - ./data/couchdb:/opt/couchdb/data
+      - ./local.ini:/opt/couchdb/etc/local.ini
+    networks:
+      - caddy
+    labels:
+      caddy: https://${OBSIDIAN_LIVESYNC_HOST}:443
+      caddy.0_log.level: INFO
+      caddy.0_log.output: file /data/caddy.log
+      caddy.0_log.output.0_roll_size: 10MB
+      caddy.0_log.output.1_roll_keep: 10
+      caddy.1_tls: ${OBSIDIAN_LIVESYNC_TLS_EMAIL} # Use the ACME HTTP-01 challenge to get a cert for the configured domain
+      # caddy.2_reverse_proxy: couchdb:5984 # use this directive if not hosting at subpath
+      caddy.2_redir: ${OBSIDIAN_LIVESYNC_SUBPATH} ${OBSIDIAN_LIVESYNC_SUBPATH}/ permanent # use the following directives to host at subpath
+      caddy.3_handle_path: ${OBSIDIAN_LIVESYNC_SUBPATH}/*
+      caddy.3_handle_path.reverse_proxy: couchdb:5984
+      caddy.4_handle.respond: AccessDenied 403
+      caddy.4_handle.respond.close: '{{\"\"}}' # convoluted way of saying no arguments
+
+networks:
+  caddy:
+    external: true
