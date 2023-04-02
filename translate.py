@@ -114,6 +114,17 @@ def convert_compose_file(input_file):
     with open(input_file, "r") as file:
         docker_compose = yaml.safe_load(file)
 
+    folder_name_match = re.match(r'.*deployments/(.*)/docker-compose\..+', input_file)
+    package_name = folder_name_match.group(1)
+    output_file = f'{package_name}.tf'
+
+    should_deploy = docker_compose.get("deploy", True)
+    if not should_deploy:
+        if os.path.isfile(output_file):
+            os.remove(output_file)
+        print(f"Skipped compose file with deploy=false: {input_file}")
+        return {}
+
     services = docker_compose.get("services", {})
     networks = docker_compose.get("networks", {})
 
@@ -133,12 +144,9 @@ def convert_compose_file(input_file):
 
     hcl_output += convert_networks_to_hcl(networks)
 
-    folder_name_match = re.match(r'.*deployments/(.*)/docker-compose\..+', input_file)
-    package_name = folder_name_match.group(1)
     for service_name, service_config in services.items():
         hcl_output += convert_to_hcl(package_name, service_name, service_config)
 
-    output_file = f'{package_name}.tf'
     with open(output_file, "w") as file:
         file.write(hcl_output)
 
