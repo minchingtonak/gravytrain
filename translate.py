@@ -99,6 +99,9 @@ def convert_to_hcl(package_name: str, service_name: str, service_config: Dict[st
         for network in service_config["networks"]:
             hcl += f'  networks_advanced {{\n    name = "{network}"\n  }}\n'
 
+    if "network_mode" in service_config:
+        hcl += f'  network_mode = "{service_config["network_mode"]}"\n'
+
     if "labels" in service_config:
         for name, value in service_config['labels'].items():
             hcl += f'  labels {{\n    label = "{name}"\n    value = "{prefix_env_vars(value)}"\n  }}\n'
