@@ -1,5 +1,6 @@
 # https://github.com/laurent22/joplin/blob/dev/docker-compose.server.yml
 version: '3'
+deploy: false
 
 services:
   joplin:
