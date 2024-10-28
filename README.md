@@ -1,40 +1,37 @@
-
-# gravytrain
-
-You bring the compose file. The rest is gravy.
-
----
-
-## About
-
-gravytrain is a simple way to manage the deployment of multiple dockerized applications on a single host.
-
-## Usage
-
-First, install Terraform
-
-```bash
-$ ./install.sh
+system to associate a stack or stacks to a specific host, with the host defined by tf code for a vps
+- could have script out put be structured like:
+```
+output/ # output is organized into deployments
+    global.tf # contains shared infra (ssh keys) (TODO see if this is necessary)
+    |-windhelm/
+        |-server.tf # contains the resources to deploy a vps behind a firewall
+        |-terraform.tfvars.json # can deploy locally using env file, either for testing or as a same-system deployment
+        |-stacks/ # contains all stacks associated with this host
+            |-windmill.tf
+            |-traefik.tf
+    |-riften/
+        |-server.tf
+        |-terraform.tfvars.json
+        |-stacks/
+            |-obsidian.tf
+            |-traefik.tf # can include a stack in multiple hosts, useful for common containers (traefik, watchtower, etc)
 ```
 
-Initialize Terraform
+the big idea
 
-```bash
-$ terraform init
-```
+- can create a new host by adding tf code for the infra for it (vps, firewall)
+- can create a new stack by adding compose file for containers
+- can associate stacks with hosts somehow (better to mark the stack or the host?)
+- can run a script to generate tf code for stacks, copy server & stack code into deployment folders, merge env vars per-host
+- can use cli to test things locally before deploying in semaphore:
+    - deploy/destroy the server infra
+    - deploy/destroy all or a subset of stacks locally
+    - deploy/destroy all or a subset of stacks to the deployed server (see if there's a way to read a tf output var from the server resource for this)
+- can commit the output folder for each deployment after testing
+- can deploy the infra using semaphore
+- can use ansible to set up server through semaphore
+- can deploy the stacks to the server using semaphore
 
-Then, add compose files in subfolders under `deployments/`
 
-When satisfied with your configuration, generate the Terraform files
 
-```bash
-$ ./generate.sh
-```
-
-If you're using any environment variables in your compose files, `terraform.tfvars.json` will be automatically created in the project root. This JSON file is where you can supply values for environment variables that your infrastructure can use for deployment/operation. Make sure to supply values for all variables (variables default value is `"FIXME"`).
-
-When you're ready to deploy, run the deploy script and verify that the resources being deployed match your expectations
-
-```bash
-$ ./deploy.sh
-```
+need to see if i can set up tf state file storage in a minio container in the semaphore stack

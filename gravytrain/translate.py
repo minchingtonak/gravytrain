@@ -66,8 +66,8 @@ def convert_to_hcl(package_name: str, service_name: str, service_config: Dict[st
     hcl = f'resource "docker_container" "{service_name}" {{\n'
     hcl += f'  name = "{service_name}"\n'
     hcl += f'  image = "{service_config["image"]}"\n'
-    if service_name != "caddy":
-        hcl += "  depends_on = [ docker_container.caddy ]\n"
+    # if service_name != "caddy":
+    #     hcl += "  depends_on = [ docker_container.caddy ]\n"
 
     if "restart" in service_config:
         hcl += f'  restart = "{service_config["restart"]}"\n'
