@@ -1,10 +1,8 @@
-import yaml
 import sys
 import os
 import re
-import json
-import glob
-from typing import Any, Dict, List, Match, Tuple, Union
+from typing import Any, Dict, List, Match, TextIO, Union
+import yaml
 
 def stringify(value: Any) -> str:
     return str(value).lower() if isinstance(value, bool) else str(value)
@@ -62,12 +60,13 @@ def convert_networks_to_hcl(networks: Dict[str, Dict[str, Any]]) -> str:
         hcl += '}\n\n'
     return hcl
 
-def convert_to_hcl(package_name: str, service_name: str, service_config: Dict[str, Any]) -> str:
+def convert_to_hcl(output_folder_path: str, service_name: str, service_config: Dict[str, Any]) -> str:
     hcl = f'resource "docker_container" "{service_name}" {{\n'
     hcl += f'  name = "{service_name}"\n'
     hcl += f'  image = "{service_config["image"]}"\n'
-    # if service_name != "caddy":
-    #     hcl += "  depends_on = [ docker_container.caddy ]\n"
+
+    if "command" in service_config:
+        hcl += f'  command = ["{service_config["command"]}"]\n'
 
     if "restart" in service_config:
         hcl += f'  restart = "{service_config["restart"]}"\n'
@@ -84,14 +83,14 @@ def convert_to_hcl(package_name: str, service_name: str, service_config: Dict[st
         for volume in service_config["volumes"]:
             parts = volume.split(":")
             is_path = "/" in parts[0] or "." in parts[0]
-            hcl += f'  volumes {{\n    {"host_path" if is_path else "volume_name"} = "{os.path.abspath(os.path.join("deployments", package_name, parts[0])) if is_path else parts[0]}"\n    container_path = "{os.path.abspath(parts[1])}"\n'
+            hcl += f'  volumes {{\n    {"host_path" if is_path else "volume_name"} = "{os.path.abspath(os.path.join(output_folder_path, parts[0])) if is_path else parts[0]}"\n    container_path = "{os.path.abspath(parts[1])}"\n'
             if len(parts) == 3:
                 hcl += f'    read_only = {"true" if parts[2] == "ro" else "false"}\n'
             hcl += "  }\n"
 
     if "environment" in service_config:
         hcl += "  env = [\n"
-        for env_var, env_value in service_config["environment"].items():
+        for env_var, env_value in map(lambda v: v.split('='), service_config["environment"]) if isinstance(service_config["environment"], list) else service_config["environment"].items():
             hcl += f'    "{env_var}={prefix_env_vars(env_value)}",\n'
         hcl += "  ]\n"
 
@@ -103,31 +102,13 @@ def convert_to_hcl(package_name: str, service_name: str, service_config: Dict[st
         hcl += f'  network_mode = "{service_config["network_mode"]}"\n'
 
     if "labels" in service_config:
-        for name, value in service_config['labels'].items():
+        for name, value in map(lambda v: v.split('='), service_config["labels"]) if isinstance(service_config["labels"], list) else service_config["labels"].items():
             hcl += f'  labels {{\n    label = "{name}"\n    value = "{prefix_env_vars(value)}"\n  }}\n'
 
     hcl += '}\n\n'
     return hcl
 
-def convert_compose_file(input_file):
-    if not os.path.isfile(input_file):
-        print(f"File {input_file} not found")
-        sys.exit(1)
-
-    with open(input_file, "r") as file:
-        docker_compose = yaml.safe_load(file)
-
-    folder_name_match = re.match(r'.*deployments/(.*)/docker-compose\..+', input_file)
-    package_name = folder_name_match.group(1)
-    output_file = f'{package_name}.tf'
-
-    should_deploy = docker_compose.get("deploy", True)
-    if not should_deploy:
-        if os.path.isfile(output_file):
-            os.remove(output_file)
-        print(f"Skipped compose file with deploy=false: {input_file}")
-        return {}
-
+def convert_compose_file(docker_compose: Any, output_folder_path: str):
     services = docker_compose.get("services", {})
     networks = docker_compose.get("networks", {})
 
@@ -135,9 +116,10 @@ def convert_compose_file(input_file):
 
     dangling_env_vars = {}
     for service_name, service_config in services.items():
-        for key in ['environment', 'labels']:
+        for key in ['environment', 'labels', 'volumes']:
             if key in service_config:
-                for env_value in service_config[key].values():
+                env_values =  service_config[key] if isinstance(service_config[key], list) else service_config[key].values()
+                for env_value in env_values:
                     matches = find_env_vars(env_value)
                     if matches:
                         for _, var_name in matches:
@@ -148,42 +130,26 @@ def convert_compose_file(input_file):
     hcl_output += convert_networks_to_hcl(networks)
 
     for service_name, service_config in services.items():
-        hcl_output += convert_to_hcl(package_name, service_name, service_config)
+        hcl_output += convert_to_hcl(output_folder_path, service_name, service_config)
 
-    with open(output_file, "w") as file:
-        file.write(hcl_output)
+    return hcl_output
 
-    print(f"Successfully converted {input_file} to {output_file}")
-    return dangling_env_vars
-
-def get_compose_files():
-    if not os.path.exists('./deployments'):
-        print('deployments directory not found')
+def main(argv: List[str], stdin: TextIO, stdout: TextIO):
+    if len(argv) != 2:
+        print('usage: python translate.py OUTPUT_DIR < COMPOSE_FILE_PATH > TF_FILE_PATH')
         sys.exit(1)
 
-    extensions = ['yml', 'yaml']
-    return [file for ext in extensions for file in glob.glob(f'./deployments/*/docker-compose.{ext}')]
+    output_folder_path = argv[1]
 
-def main():
-    files = get_compose_files()
+    # read compose file content from stdin
+    compose_file = yaml.safe_load(stdin.read())
 
-    dangling_env_vars = {}
-    for compose_file in files:
-        file_dangling_vars = convert_compose_file(compose_file)
-        dangling_env_vars.update(file_dangling_vars)
+    tf_code = convert_compose_file(compose_file, output_folder_path)
 
-    # don't nuke previous env var values when regenerating
-    if os.path.isfile('terraform.tfvars.json'):
-        with open('terraform.tfvars.json', 'r') as file:
-            content = json.load(file)
-            for env_var in content.keys():
-                if env_var in dangling_env_vars:
-                    dangling_env_vars[env_var] = content[env_var]
-
-    with open("terraform.tfvars.json", "w") as file:
-        json.dump(dangling_env_vars, file, indent=4)
-
-    print("Wrote terraform.tfvars.json")
+    stdout.write(tf_code)
 
 if __name__ == "__main__":
-    main()
+    # print to stderr by default, reserve stdout specifically for program output
+    original_stdout = sys.stdout
+    sys.stdout = sys.stderr
+    main(sys.argv, sys.stdin, original_stdout)

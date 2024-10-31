@@ -1,0 +1,127 @@
+#!/usr/bin/env bun
+import { $ } from 'bun';
+
+type EnvVars = Record<string, string>;
+
+type HostEnvVars = {
+  server: EnvVars;
+  stacks: EnvVars;
+};
+
+async function findExistingEnvVars(host: string): Promise<HostEnvVars> {
+  const { exitCode: exitCodeServer, stdout: stdoutServer } =
+    await $`cat deployments/${host}/server/terraform.tfvars.json`
+      .quiet()
+      .nothrow();
+  const { exitCode: exitCodeStacks, stdout: stdoutStacks } =
+    await $`cat deployments/${host}/stacks/terraform.tfvars.json`
+      .quiet()
+      .nothrow();
+
+  return {
+    server: exitCodeServer === 0 ? JSON.parse(stdoutServer.toString()) : {},
+    stacks: exitCodeStacks === 0 ? JSON.parse(stdoutStacks.toString()) : {},
+  };
+}
+
+async function copyHostInfraCode(host: string) {
+  await $`cp hosts/${host}/*.tf deployments/${host}/server/`;
+}
+
+async function findEnvVars(
+  host: string,
+  folder: 'server' | 'stacks',
+  existingVars: EnvVars,
+): Promise<EnvVars> {
+  // generate a list of all variables across all tf files
+  const vars = (
+    await $`find deployments/${host}/${folder} -type f -name "*.tf" -exec sed -nE 's/variable "(.+)" \{/\1/p' {} +`.text()
+  )
+    .trim()
+    .split('\n');
+
+  if (vars.length === 1 && vars[0].length === 0) {
+    return {};
+  }
+
+  const tfvarsJson: EnvVars = {};
+  for (const variable of vars) {
+    if (variable in tfvarsJson) {
+      console.warn(
+        `found variable ${variable} exists in multiple places for host ${host}`,
+      );
+      continue;
+    }
+
+    // use previously populated value if it exists
+    tfvarsJson[variable] =
+      variable in existingVars ? existingVars[variable] : 'FIXME';
+  }
+
+  return tfvarsJson;
+}
+
+async function writeEnvVarFiles(
+  host: string,
+  envVars: HostEnvVars,
+): Promise<void> {
+  for (const [folder, existingVars] of Object.entries(envVars) as [
+    keyof HostEnvVars,
+    EnvVars,
+  ][]) {
+    const vars = await findEnvVars(host, folder, existingVars);
+    await Bun.write(
+      `deployments/${host}/${folder}/terraform.tfvars.json`,
+      JSON.stringify(vars, null, 2),
+    );
+  }
+}
+
+type ServerConfig = {
+  stacks: string[];
+};
+
+async function translateAndWriteHostStacks(host: string): Promise<void> {
+  const serverConfig =
+    (await $`cat hosts/${host}/server.json`.json()) as ServerConfig;
+
+  for (const stack of serverConfig.stacks) {
+    const translatedStack = await translateStack(host, stack);
+
+    await Bun.write(`deployments/${host}/stacks/${stack}.tf`, translatedStack);
+    // FIXME potential issue if two stacks' config files have the same names, cp will overwrite the existing file
+    // should copy stack config files to subdirectory and reference in tf file
+    await $`cp stacks/${stack}/* deployments/${host}/stacks/ && rm deployments/${host}/stacks/compose.yaml`;
+  }
+}
+
+async function translateStack(host: string, stack: string): Promise<Blob> {
+  return (
+    await $`cat stacks/${stack}/compose.yaml | python3 gravytrain/translate.py deployments/${host}/stacks`.quiet()
+  ).blob();
+}
+
+async function main() {
+  const hosts = (await $`ls hosts`.text()).trim().split('\n');
+
+  for (const host of hosts) {
+    const envVars = await findExistingEnvVars(host);
+
+    await $`rm -r deployments/${host}`.nothrow().quiet();
+    await $`mkdir -p deployments/${host}/{server,stacks}`;
+
+    await copyHostInfraCode(host);
+    await translateAndWriteHostStacks(host);
+
+    await $`cp gravytrain/main-hcloud.tf deployments/${host}/server/main.tf`;
+    await $`cp gravytrain/main-docker.tf deployments/${host}/stacks/main.tf`;
+
+    await writeEnvVarFiles(host, envVars);
+  }
+}
+
+main().catch(console.error);
+
+// deploy/destroy server infra
+// deploy/destroy all or a subset of stacks locally
+// deploy/destroy all or a subset of stacks to the deployed server (see if there's a way to read a tf output var from the server resource for this)?
