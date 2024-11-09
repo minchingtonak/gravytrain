@@ -1,0 +1,218 @@
+- name: Create a hetzner vps
+  hosts: localhost
+  connection: local
+  module_defaults:
+    group/hetzner.hcloud.all:
+      api_token: '{{ hcloud_token }}'
+  vars:
+    ssh_pub_key_value: "{{ lookup('file', '{{ ssh_pub_key_path }}') }}"
+    cloud_init: |
+      #cloud-config
+      users:
+        - name: '{{ ssh_user }}'
+          groups: users, admin, docker
+          sudo: ALL=(ALL) NOPASSWD:ALL
+          shell: /bin/bash
+          ssh_authorized_keys:
+            - '{{ ssh_pub_key_value }}'
+      package_update: true
+      package_upgrade: true
+      runcmd:
+        - sed -i -e '/^\(#\|\)PermitRootLogin/s/^.*$/PermitRootLogin no/' /etc/ssh/sshd_config
+        - sed -i -e '/^\(#\|\)PasswordAuthentication/s/^.*$/PasswordAuthentication no/' /etc/ssh/sshd_config
+        - sed -i -e '/^\(#\|\)KbdInteractiveAuthentication/s/^.*$/KbdInteractiveAuthentication no/' /etc/ssh/sshd_config
+        - sed -i -e '/^\(#\|\)ChallengeResponseAuthentication/s/^.*$/ChallengeResponseAuthentication no/' /etc/ssh/sshd_config
+        - sed -i -e '/^\(#\|\)MaxAuthTries/s/^.*$/MaxAuthTries 2/' /etc/ssh/sshd_config
+        - sed -i -e '/^\(#\|\)AllowTcpForwarding/s/^.*$/AllowTcpForwarding no/' /etc/ssh/sshd_config
+        - sed -i -e '/^\(#\|\)X11Forwarding/s/^.*$/X11Forwarding no/' /etc/ssh/sshd_config
+        - sed -i -e '/^\(#\|\)AllowAgentForwarding/s/^.*$/AllowAgentForwarding no/' /etc/ssh/sshd_config
+        - sed -i -e '/^\(#\|\)AuthorizedKeysFile/s/^.*$/AuthorizedKeysFile .ssh\/authorized_keys/' /etc/ssh/sshd_config
+        - sed -i '$a AllowUsers {{ ssh_user }}' /etc/ssh/sshd_config
+  tasks:
+    - name: Create a firewall with rules
+      hetzner.hcloud.firewall:
+        name: '{{ hostname }}-firewall'
+        rules:
+          - description: allow ssh
+            direction: in
+            protocol: tcp
+            port: 22
+            source_ips:
+              - 0.0.0.0/0
+              - ::/0
+          - description: allow http
+            direction: in
+            protocol: tcp
+            port: 80
+            source_ips:
+              - 0.0.0.0/0
+              - ::/0
+          - description: allow https
+            direction: in
+            protocol: tcp
+            port: 443
+            source_ips:
+              - 0.0.0.0/0
+              - ::/0
+        state: present
+
+    - name: Create a server with ssh key and firewall
+      hetzner.hcloud.server:
+        name: '{{ hostname }}'
+        server_type: '{{ type }}'
+        image: '{{ image }}'
+        location: '{{ location }}'
+        firewalls:
+          - '{{ hostname }}-firewall'
+        user_data: '{{ cloud_init }}'
+        backups: true
+        state: present
+      register: server_output
+
+    - name: Ensure the server is started
+      hetzner.hcloud.server:
+        name: '{{ hostname }}'
+        state: started
+
+    - name: Show results
+      ansible.builtin.debug:
+        var: server_output
+
+    - name: Add SSH config entry
+      community.general.ssh_config:
+        ssh_config_file: ~/.ssh/config
+        host: '{{ hostname }}'
+        hostname: '{{ server_output.hcloud_server.ipv4_address }}'
+        remote_user: '{{ ssh_user }}'
+        identity_file: '{{ ssh_key_path }}'
+        state: present
+      register: ssh_output
+
+    - name: Display SSH config changes
+      ansible.builtin.debug:
+        var: ssh_output
+
+    - name: Remove stale entries from known_hosts if necessary
+      ansible.builtin.lineinfile:
+        path: ~/.ssh/known_hosts
+        search_string: '{{ server_output.hcloud_server.ipv4_address }}'
+        state: absent
+      register: known_hosts_output
+
+    - name: Display SSH known_hosts changes
+      ansible.builtin.debug:
+        var: known_hosts_output
+
+# ansible is configured to retry ssh connection in case the server is not ready
+- name: Wait for server to finish setup
+  hosts: '{{ hostname }}'
+  tasks:
+    - name: Wait for cloud-init to finish
+      ansible.builtin.command: cloud-init status --wait
+      register: wait_output
+      # TODO handle recorverable errors, possibly use cloud init module
+      # https://cloudinit.readthedocs.io/en/latest/explanation/return_codes.html
+      failed_when: wait_output.rc != 0 and wait_output.rc != 2
+
+    - name: Show cloud-init results
+      ansible.builtin.debug:
+        var: wait_output
+
+    - name: Reboot the server and wait for it to respond to commands
+      become: true
+      ansible.builtin.reboot:
+
+- name: Deploy stacks to the server
+  hosts: '{{ hostname }}'
+  vars:
+    remote_env_file_path: '~/gravytrain/.stacks.env'
+    remote_stacks_path: '~/gravytrain/stacks'
+  tasks:
+    - name: Check for existing stacks
+      ansible.builtin.find:
+        file_type: directory
+        paths:
+          - '{{ remote_stacks_path }}'
+      register: existing_stacks
+
+    - name: Tear down existing services
+      community.docker.docker_compose_v2:
+        project_src: '{{ item.path }}'
+        state: absent
+      loop: '{{ existing_stacks.files }}'
+      when: existing_stacks.matched != 0
+
+    - name: Sync env file
+      ansible.posix.synchronize:
+        src: '{{ hosts_path }}/{{ hostname }}/.stacks.env'
+        dest: '{{ remote_env_file_path }}'
+        rsync_opts: --mkpath
+
+    - name: Sync stacks files
+      ansible.posix.synchronize:
+        src: '{{ stacks_path }}/{{ item }}/'
+        dest: '{{ remote_stacks_path }}/{{ item }}/'
+        rsync_opts: --mkpath
+      loop: '{{ stacks }}'
+
+    # for the time being, assume all deployments will use traefik
+    - name: Create traefik network
+      community.docker.docker_network:
+        name: traefik
+        state: present
+
+    - name: Create and start stacks
+      community.docker.docker_compose_v2:
+        project_src: '{{ remote_stacks_path }}/{{ item }}'
+        env_files:
+          - '{{ remote_env_file_path }}'
+        state: present
+      register: compose_up_output
+      loop: '{{ stacks }}'
+
+- name: Configure DNS entries
+  hosts: localhost
+  connection: local
+  vars:
+    stack_env_vars: "{{ lookup('file', '{{ hosts_path }}/{{ hostname }}/.stacks.env').splitlines() }}"
+    domains: []
+    subdomains: []
+  tasks:
+    - name: Filter and parse domain variables
+      loop: "{{ stack_env_vars }}"
+      # match on hostnames with subdomains only
+      when: item | regex_search('_DOMAIN=(.+\.)+(.+\..+)')
+      vars:
+        domain_var: "{{ item.split('=')[1] }}"
+        parts: "{{ domain_var.split('.') }}"
+        tld: "{{ parts[-2] + '.' + parts[-1] }}"
+        subdomain: "{{ '.'.join(parts[:-2]) }}"
+      ansible.builtin.set_fact:
+        domains: "{{ domains + [tld] }}"
+        subdomains: "{{ subdomains + [subdomain] }}"
+
+    - name: Log discovered domains
+      ansible.builtin.debug:
+        var: domains
+
+    - name: Log discovered subdomains
+      ansible.builtin.debug:
+        var: subdomains
+
+    - name: Create DNS record pointing to the server
+      sdorra.porkbun.porkbun_record:
+        state: present
+        domain: '{{ item[0] }}'
+        record_type: A
+        name: '{{ item[1] }}'
+        content: '{{ server_output.hcloud_server.ipv4_address }}'
+        ttl: 3600
+        api_key: '{{ porkbun_api_key }}'
+        secret_api_key: '{{ porkbun_secret_api_key }}'
+      loop: '{{ domains | zip(subdomains) }}'
+      register: dns_output
+
+    - name: Log DNS output
+      ansible.builtin.debug:
+        var: dns_output
+

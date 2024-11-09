@@ -60,3 +60,38 @@ cons of ^
 
 
 need to see if i can set up tf state file storage in a minio container in the semaphore stack
+
+Do i even need to have any tf at all? if ansible can handle setting up infra and services
+pros
+- could have single playbook to deploy server, set up, and deploy stacks
+- no need to introduce opentofu as dependency
+- no need to maintain translation script
+- cli complexity decreases
+- if codegen necessary, much easier to represent yaml than tf code
+- potentially no bun dependency needed either
+cons
+- lose any additional benefits of opentofu (examples?)
+
+
+
+what is the way that i would like to interact with this system?
+- define a host as a playbook that creates server infra
+- define stacks as compose files
+- associate stacks with a host
+- gravy deploy HOSTNAME - deploys host by running playbook (implicit --server)
+- gravy deploy HOSTNAME --setup - hardens an already-deployed host
+- gravy deploy HOSTNAME --stacks - deploys stacks to an already-deployed host (--local for local deployment)
+- gravy deploy stack STACKNAME(S) - deploys a specific set of stacks locally
+
+
+
+simple idea:
+- hosts folder contains a config file that defines the host's configuration (vps specs, stacks to deploy)
+- hosts folder contains a .stacks.env file with the necessary variables for deploying stacks to server
+- stacks folder contains compose file and any config files needed
+- with this, can have a bunch of playbooks to accomplish generic tasks
+    - deploy vps
+    - configure vps for security
+    - deploy stacks
+- then, can run playbooks with variables from host config
+- can wrap in a cute cli if i want
