@@ -12,7 +12,8 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - ./traefik.yml:/etc/traefik/traefik.yml:ro
-      - ./config.yml:/etc/traefik/config.yml:ro
+      # - ./config.yml:/etc/traefik/config.yml:ro
+      - ./traefik.log:/etc/traefik/traefik.log
       - ./letsencrypt:/letsencrypt
     labels:
       - traefik.enable=true
@@ -27,8 +28,8 @@ services:
       - traefik.http.routers.traefik-secure.middlewares=traefik-auth
       - traefik.http.routers.traefik-secure.tls=true
       - traefik.http.routers.traefik-secure.tls.certresolver=porkbun
-      - traefik.http.routers.traefik-secure.tls.domains[0].main=${TRAEFIK_SSL_DOMAIN}
-      - traefik.http.routers.traefik-secure.tls.domains[0].sans=*.${TRAEFIK_SSL_DOMAIN}
+      - traefik.http.routers.traefik-secure.tls.domains[0].main=${TRAEFIK_SSL_DOMAIN_BASE}
+      - traefik.http.routers.traefik-secure.tls.domains[0].sans=*.${TRAEFIK_SSL_DOMAIN_BASE}
       - traefik.http.routers.traefik-secure.service=api@internal
     networks:
       - traefik

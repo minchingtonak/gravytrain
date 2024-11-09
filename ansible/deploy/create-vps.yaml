@@ -199,14 +199,14 @@
       ansible.builtin.debug:
         var: subdomains
 
-    - name: Create DNS record pointing to the server
+    - name: Create DNS records pointing to the server
       sdorra.porkbun.porkbun_record:
         state: present
         domain: '{{ item[0] }}'
         record_type: A
         name: '{{ item[1] }}'
         content: '{{ server_output.hcloud_server.ipv4_address }}'
-        ttl: 3600
+        ttl: 600
         api_key: '{{ porkbun_api_key }}'
         secret_api_key: '{{ porkbun_secret_api_key }}'
       loop: '{{ domains | zip(subdomains) }}'

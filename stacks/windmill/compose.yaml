@@ -1,0 +1,151 @@
+services:
+  db:
+    deploy:
+      replicas: 1
+    image: postgres:16
+    shm_size: 1g
+    restart: unless-stopped
+    volumes:
+      - ${DB_DATA_PATH}:/var/lib/postgresql/data
+    expose:
+      - 5432
+    ports:
+      - 127.0.0.1:5432:5432
+    environment:
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: windmill
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U postgres
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - windmill
+  windmill_server:
+    image: ghcr.io/windmill-labs/windmill:main
+    pull_policy: always
+    deploy:
+      replicas: 1
+    restart: unless-stopped
+    expose:
+      - 8000
+      - 2525
+    environment:
+      - DATABASE_URL=postgres://postgres:${DB_PASSWORD}@db/windmill?sslmode=disable
+      - MODE=server
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ${WINDMILL_LOGS_PATH}:/tmp/windmill/logs
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.windmill-server.entrypoints=https
+      - traefik.http.routers.windmill-server.rule=Host(`${WINDMILL_PROXY_DOMAIN}`)
+      - traefik.http.routers.windmill-server.service=windmill-server
+      - traefik.http.routers.windmill-server.tls=true
+      - traefik.http.routers.windmill-server.tls.certresolver=porkbun
+      - traefik.http.services.windmill-server.loadbalancer.server.port=8000
+    networks:
+      - windmill
+      - traefik
+  windmill_worker:
+    image: ghcr.io/windmill-labs/windmill:main
+    pull_policy: always
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          cpus: "1"
+          memory: 2048M
+    restart: unless-stopped
+    environment:
+      - DATABASE_URL=postgres://postgres:${DB_PASSWORD}@db/windmill?sslmode=disable
+      - MODE=worker
+      - WORKER_GROUP=default
+    depends_on:
+      db:
+        condition: service_healthy
+    # to mount the worker folder to debug, KEEP_JOB_DIR=true and mount /tmp/windmill
+    volumes:
+      # mount the docker socket to allow to run docker containers from within the workers
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${WINDMILL_WORKER_DEPENDENCY_CACHE_PATH}:/tmp/windmill/cache
+      - ${WINDMILL_LOGS_PATH}:/tmp/windmill/logs
+    networks:
+      - windmill
+  ## This worker is specialized for "native" jobs. Native jobs run in-process and thus are much more lightweight than other jobs
+  windmill_worker_native:
+    image: ghcr.io/windmill-labs/windmill:main
+    pull_policy: always
+    deploy:
+      replicas: 1
+      resources:
+        limits:
+          cpus: "1"
+          memory: 2048M
+    restart: unless-stopped
+    environment:
+      - DATABASE_URL=postgres://postgres:${DB_PASSWORD}@db/windmill?sslmode=disable
+      - MODE=worker
+      - WORKER_GROUP=native
+      - NUM_WORKERS=8
+      - SLEEP_QUEUE=200
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ${WINDMILL_LOGS_PATH}:/tmp/windmill/logs
+    networks:
+      - windmill
+  # This worker is specialized for reports or scraping jobs. It is assigned the "reports" worker group which has an init script that installs chromium and can be targeted by using the "chromium" worker tag.
+  windmill_worker_reports:
+    image: ghcr.io/windmill-labs/windmill:main
+    pull_policy: always
+    deploy:
+      replicas: 1
+      resources:
+        limits:
+          cpus: "1"
+          memory: 2048M
+    restart: unless-stopped
+    environment:
+      - DATABASE_URL=postgres://postgres:${DB_PASSWORD}@db/windmill?sslmode=disable
+      - MODE=worker
+      - WORKER_GROUP=reports
+    depends_on:
+      db:
+        condition: service_healthy
+    # to mount the worker folder to debug, KEEP_JOB_DIR=true and mount /tmp/windmill
+    volumes:
+      # mount the docker socket to allow to run docker containers from within the workers
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${WINDMILL_WORKER_DEPENDENCY_CACHE_PATH}:/tmp/windmill/cache
+      - ${WINDMILL_LOGS_PATH}:/tmp/windmill/logs
+    networks:
+      - windmill
+  lsp:
+    image: ghcr.io/windmill-labs/windmill-lsp:latest
+    pull_policy: always
+    restart: unless-stopped
+    expose:
+      - 3001
+    volumes:
+      - ${WINDMILL_LSP_CACHE_PATH}:/root/.cache
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.windmill-lsp.entrypoints=https
+      - traefik.http.routers.windmill-lsp.rule=Host(`${WINDMILL_PROXY_DOMAIN}`)
+      - traefik.http.routers.windmill-lsp.service=windmill-lsp
+      - traefik.http.routers.windmill-lsp.tls=true
+      - traefik.http.routers.windmill-lsp.tls.certresolver=porkbun
+      - traefik.http.services.windmill-lsp.loadbalancer.server.port=3001
+    networks:
+      - windmill
+      - traefik
+networks:
+  windmill:
+  traefik:
+    external: true

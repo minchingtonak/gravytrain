@@ -15,7 +15,6 @@ function runPlaybook(
 
 const HostConfigSchema = z
   .object({
-    hostname: z.string(),
     type: z.string(),
     image: z.string(),
     location: z.string(),
@@ -31,9 +30,10 @@ async function deploy(hostname: string): Promise<void> {
 
   await runPlaybook(
     'deploy/create-vps.yaml',
-    ['localhost', hostConfig.hostname],
+    ['localhost', hostname],
     {
       ...hostConfig,
+      hostname: hostname,
       hosts_path: path.resolve('hosts/'),
       stacks_path: path.resolve('stacks/'),
       ssh_user: 'akmin',
