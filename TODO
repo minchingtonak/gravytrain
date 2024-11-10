@@ -1,3 +1,11 @@
 - [ ] unattended upgrades
 - [ ] watchtowerr
 - [ ] set server to start deployed stacks on restart
+- [ ] need a way to be able to maintain an existing deployment
+    - would be nice if i could run individual steps of the deploy if i needed to
+    - would mainly be to rerun the deploy stacks and dns steps as i iterate on compose files
+    - but should be just as easy to run any single or set of tasks
+    - i would like a good compromise between the power of having custom config files and a ts cli and having to manually run each ansible playbook
+    - the ideal system would allow execution of a single step given the config and all prev steps stored output (maybe can do with facts? probably not since on localhost we would want to store multiple vps deployment outputs but it would just overwrite the prev deployment)
+    - ideally each step would save its important state after execution so future steps can read it
+    - what im describing is starting to sound like terraform state kinda (not convinced it would work for my use case though)
